@@ -62,8 +62,8 @@ jobs:
         target: final
         platforms: linux/amd64,linux/arm64
         tags: |
-          ghcr.io/${{ github.repository_owner_lowercase  }}/rinha-backend-2025-dotnet:${{ steps.version.outputs.tag }}
-          ghcr.io/${{ github.repository_owner_lowercase  }}/rinha-backend-2025-dotnet:latest
+          ghcr.io/igorlucas/rinha-backend-2025-dotnet:${{ steps.version.outputs.tag }}
+          ghcr.io/igorlucas/rinha-backend-2025-dotnet:latest
 
     - name: Create GitHub Release
       uses: actions/create-release@v1
