@@ -1,16 +1,16 @@
 name: 🚀 On push to main
 
 on:
-push:
+ push:
   branches:
     - main
 
 permissions:
-contents: read
-packages: write
+ contents: read
+ packages: write
 
 jobs:
-tag:
+ tag:
   name: 🔖 Tag Release
   runs-on: ubuntu-latest
   permissions:
@@ -34,7 +34,7 @@ tag:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-build-and-push-docker-image:
+ build-and-push-docker-image:
   name: 🐳 Build and Push Docker Image
   runs-on: ubuntu-latest
   needs: tag
