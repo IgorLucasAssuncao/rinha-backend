@@ -4,45 +4,41 @@ on:
  push:
   branches:
     - main
-
  workflow_dispatch:
 
 permissions:
- contents: read
+ contents: write
  packages: write
 
 jobs:
- tag:
-  name: 🔖 Tag Release
+ tag-and-build:
+  name: 🔖 Tag and Build
   runs-on: ubuntu-latest
-  permissions:
-    contents: write
   steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: "18"
-
-    - name: Install semantic-release
+    - name: Generate version
+      id: version
       run: |
-        npm install -g semantic-release @semantic-release/github @semantic-release/git
+        # Pega última tag ou começa com v1.0.0
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag: $LATEST_TAG"
+        
+        # Incrementa versão patch (v1.0.0 -> v1.0.1)
+        NEW_VERSION=$(echo $LATEST_TAG | sed 's/v//' | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
+        NEW_TAG="v$NEW_VERSION"
+        
+        echo "New tag: $NEW_TAG"
+        echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-    - name: Run semantic-release
-      run: npx semantic-release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
- build-and-push-docker-image:
-  name: 🐳 Build and Push Docker Image
-  runs-on: ubuntu-latest
-  needs: tag
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - name: Create and push tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag ${{ steps.version.outputs.tag }}
+        git push origin ${{ steps.version.outputs.tag }}
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -57,13 +53,6 @@ jobs:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Fetch latest tag
-      id: get_tag
-      run: |
-        git fetch --tags
-        TAG=$(git describe --tags --abbrev=0)
-        echo "tag=$TAG" >> $GITHUB_OUTPUT
-
     - name: Build and push Docker images
       uses: docker/build-push-action@v5.1.0
       with:
@@ -73,5 +62,20 @@ jobs:
         target: final
         platforms: linux/amd64,linux/arm64
         tags: |
-          ghcr.io/${{ github.repository_owner }}/rinha-backend-2025-dotnet:${{ steps.get_tag.outputs.tag }}
+          ghcr.io/${{ github.repository_owner }}/rinha-backend-2025-dotnet:${{ steps.version.outputs.tag }}
           ghcr.io/${{ github.repository_owner }}/rinha-backend-2025-dotnet:latest
+
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.tag }}
+        release_name: Release ${{ steps.version.outputs.tag }}
+        body: |
+          🚀 **Automated Release**
+          
+          - Docker image: `ghcr.io/${{ github.repository_owner }}/rinha-backend-2025-dotnet:${{ steps.version.outputs.tag }}`
+          - Built from commit: ${{ github.sha }}
+        draft: false
+        prerelease: false
