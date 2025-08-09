@@ -6,9 +6,6 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-RUN apt update
-RUN apt install -y clang zlib1g-dev
-
 # Backend Port - CONSISTENTE
 EXPOSE 5000
 
