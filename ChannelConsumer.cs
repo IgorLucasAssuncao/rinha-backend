@@ -142,8 +142,10 @@ namespace rinha_backend
 
                     if (!paymentResult.Item1)
                     {
+                        _logger.LogInformation("Reenfileirando pagamento: {CorrelationId}, Amount: {Amount}", message.CorrelationId, message.Amount);
                         await db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message, AppJsonContext.Default.Payments));
-                    }else
+                    }
+                    else
                     {
                         await using var conn = new Npgsql.NpgsqlConnection(_config.GetConnectionString("postgres")!);
                         await conn.OpenAsync();

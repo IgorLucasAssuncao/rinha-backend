@@ -67,6 +67,13 @@ namespace rinha_backend
                 TotalRequests = totalRequests;
                 TotalAmount = totalAmount;
             }
+
+            public PaymentSummary()
+            {
+                IsDefault = true;
+                TotalRequests = 0;
+                TotalAmount = 0.0m;
+            }
         }
 
         internal sealed record PaymentItem
