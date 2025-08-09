@@ -1,7 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using static rinha_backend.Responses;
 
-public class PaymentDecider
+internal class PaymentDecider
 {
     private readonly ConcurrentDictionary<string, PaymentServiceHealth> _services = new();
     private volatile string _bestService = "default";

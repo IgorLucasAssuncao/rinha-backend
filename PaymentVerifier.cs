@@ -5,7 +5,7 @@ using static rinha_backend.Responses;
 
 namespace rinha_backend
 {
-    public class PaymentVerifier : BackgroundService
+    internal class PaymentVerifier : BackgroundService
     {
         private readonly HttpClient _default;
         private readonly HttpClient _fallback;
@@ -45,7 +45,7 @@ namespace rinha_backend
 
                 var content = await response.Content.ReadAsStringAsync();
 
-                return JsonSerializer.Deserialize<PaymentServiceHealth>(content)!;
+                return JsonSerializer.Deserialize<PaymentServiceHealth>(content, AppJsonContext.Default.PaymentServiceHealth)!;
             }
             catch
             {

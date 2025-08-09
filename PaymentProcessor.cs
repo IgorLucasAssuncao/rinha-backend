@@ -4,7 +4,7 @@ using static rinha_backend.Models;
 
 namespace rinha_backend
 {
-    public class PaymentProcessor
+    internal class PaymentProcessor
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly PaymentDecider _paymentDecider;
@@ -45,14 +45,14 @@ namespace rinha_backend
                 var client = _httpClientFactory.CreateClient(serviceName);
                 var timeout = _paymentDecider.GetRecommendedTimeout(serviceName);
 
-                var payload = new
-                {
-                    correlationId = payment.CorrelationId,
-                    amount = payment.Amount,
-                    requestedAt = payment.RequestedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-                };
+                var payload = new PaymentsRequestDTO(
+                
+                    correlationId: payment.CorrelationId,
+                    amount: payment.Amount,
+                    requestedAt: payment.RequestedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+                );
 
-                var json = JsonSerializer.Serialize(payload);
+                var json = JsonSerializer.Serialize(payload, AppJsonContext.Default.Payments);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 using var cts = new CancellationTokenSource(timeout);

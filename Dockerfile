@@ -1,39 +1,35 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+# See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 WORKDIR /app
 
-COPY *.csproj ./
-RUN dotnet restore --runtime linux-x64
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
 
+RUN apt update
+RUN apt install -y clang zlib1g-dev
+
+# Backend Port
+EXPOSE 8080
+
+COPY ["rinha-backend.csproj", "."]
+RUN dotnet restore "rinha-backend.csproj"
 COPY . .
-RUN dotnet publish \
--c Release \
--r linux-x64 \
--o /app/out \
---self-contained true \
---no-restore \
-/p:PublishAot=true \
-/p:PublishTrimmed=true
 
-# Debug: Ver o que foi gerado
-RUN ls -la /app/out/ && find /app/out -name "*backend*"
+WORKDIR "/src/"
+RUN dotnet build "rinha-backend.csproj" -c Release -o /app/build
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:9.0 AS runtime
+FROM build AS publish
+RUN dotnet publish "rinha-backend.csproj" -c Release --self-contained true -r linux-x64 -o /app/publish /p:PublishAot=true /p:UseAppHost=false
+RUN rm -f /app/publish/*.dbg /app/publish/*.Development.json
+
+FROM base AS final
 WORKDIR /app
 EXPOSE 5000
 ENV ASPNETCORE_URLS=http://+:5000
 
-COPY --from=build /app/out ./
+COPY --from=publish /app/publish .
 
-# Tornar executável e criar script inteligente
-RUN if [ -f "./rinha-backend" ]; then \
-    chmod +x ./rinha-backend; \
-    echo "AOT executável encontrado"; \
-    echo "#!/bin/bash\nexec ./rinha-backend \"\$@\"" > /app/start.sh; \
-else \
-    echo "AOT falhou, usando DLL"; \
-    echo "#!/bin/bash\nexec dotnet rinha-backend.dll \"\$@\"" > /app/start.sh; \
-fi && \
-chmod +x /app/start.sh && \
-ls -la
+USER root
 
-ENTRYPOINT ["/app/start.sh"]
+ENTRYPOINT ["./rinha-backend"]

@@ -5,9 +5,9 @@ using System.Text.Json.Serialization;
 
 namespace rinha_backend
 {
-    public class Models
+    internal class Models
     {
-        public struct Payments
+        internal struct Payments
         {
             public Payments()
             {
@@ -19,12 +19,26 @@ namespace rinha_backend
             public bool IsDefault { get; set; } = true;
             public DateTimeOffset RequestedAt { get; set; }
         }
+
+        internal struct PaymentsRequestDTO
+        {
+            public Guid correlationId { get; set; }
+            public decimal amount { get; set; }
+            public string requestedAt { get; set; }
+
+            public PaymentsRequestDTO(Guid correlationId, decimal amount, string requestedAt)
+            {
+                this.correlationId = correlationId;
+                this.amount = amount;
+                this.requestedAt = requestedAt;
+            }
+        }
     }
 
-    public class Requests
+    internal class Requests
     {
         //Requests do cliente
-        public struct PaymentsRequest
+        internal struct PaymentsRequest
         {
             [JsonPropertyName("correlationId")]
             public Guid CorrelationId { get; set; }
@@ -34,7 +48,7 @@ namespace rinha_backend
         }
     }
 
-    public class Responses
+    internal class Responses
     {
         //Responses da API e do PaymentsService
         public sealed record PaymentSummary
@@ -55,7 +69,7 @@ namespace rinha_backend
             }
         }
 
-        public sealed record PaymentItem
+        internal sealed record PaymentItem
         {
             [JsonPropertyName("totalRequests")]
             public int TotalRequests { get; set; }
@@ -69,7 +83,7 @@ namespace rinha_backend
                 TotalAmount = totalAmount;
             }
         }
-        public record PaymentsSummaryResponse
+        internal record PaymentsSummaryResponse
         {
             [JsonPropertyName("default")]
             public PaymentItem Default { get; set; }
@@ -84,7 +98,7 @@ namespace rinha_backend
             }
         }
 
-        public record PaymentServiceHealth
+        internal record PaymentServiceHealth
         {
             [JsonPropertyName("failing")]
             public bool IsFailing { get; set; }

@@ -3,8 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using MySql.Data.MySqlClient;
 using StackExchange.Redis;
-using System;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using static rinha_backend.Models;
 using static rinha_backend.Requests;
 using static rinha_backend.Responses;
 
@@ -16,7 +17,7 @@ namespace rinha_backend
         {
             var builder = WebApplication.CreateSlimBuilder(args);
 
-            builder.Services.AddControllers();
+            //builder.Services.AddControllers();
 
             #region Redis
 
@@ -47,22 +48,22 @@ namespace rinha_backend
             #endregion
 
             var mySqlconn = builder.Configuration.GetConnectionString("postgres");
- 
+
             builder.Services.AddHttpClient("default", o =>
                 o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("default")!));
 
             builder.Services.AddHttpClient("fallback", o =>
                 o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!));
-            
+
 
             var app = builder.Build();
 
-            app.UseAuthorization();
+            //app.UseAuthorization();
 
-            app.MapPost("/payments", async ([FromBody]PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis) =>
+            app.MapPost("/payments", async ([FromBody] PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis) =>
             {
                 var db = _redis.GetDatabase();
-                string json = JsonSerializer.Serialize(request);
+                string json = JsonSerializer.Serialize(request, AppJsonContext.Default.PaymentsRequest);
                 await db.ListLeftPushAsync("payments-queue", json);
 
                 return Results.Ok();
@@ -75,13 +76,13 @@ namespace rinha_backend
                 await conn.OpenAsync();
 
                 var query = @"
-                SELECT IsDefault,
-                      COUNT(*) AS TotalRequests,
-                      SUM(Amount) AS TotalAmount
-                FROM payments
-                WHERE(@from IS NULL OR RequestedAt >= @from)
-                  AND(@to IS NULL OR RequestedAt <= @to)
-                GROUP BY IsDefault";
+                    SELECT IsDefault,
+                          COUNT(*) AS TotalRequests,
+                          SUM(Amount) AS TotalAmount
+                    FROM payments
+                    WHERE(@from IS NULL OR RequestedAt >= @from)
+                      AND(@to IS NULL OR RequestedAt <= @to)
+                    GROUP BY IsDefault";
 
                 var results = await conn.QueryAsync<PaymentSummary>(query, new
                 {
@@ -93,8 +94,8 @@ namespace rinha_backend
                 var fallbackResult = results.FirstOrDefault(r => !r.IsDefault) ?? new PaymentSummary(false, 0, 0);
 
                 var summary = new PaymentsSummaryResponse(
-                    new (defaultResult.TotalRequests, defaultResult.TotalAmount),
-                    new (fallbackResult.TotalRequests, fallbackResult.TotalAmount)
+                    new(defaultResult.TotalRequests, defaultResult.TotalAmount),
+                    new(fallbackResult.TotalRequests, fallbackResult.TotalAmount)
                 );
                 return Results.Ok(summary);
             });
@@ -107,9 +108,26 @@ namespace rinha_backend
                 await conn.ExecuteAsync(sql);
             });
 
-            app.MapControllers();
+           // app.MapControllers();
 
             app.Run();
         }
+    }
+
+    [JsonSerializable(typeof(Payments))]
+    [JsonSerializable(typeof(PaymentsRequest))]
+    [JsonSerializable(typeof(PaymentSummary))]
+    [JsonSerializable(typeof(PaymentItem))]
+    [JsonSerializable(typeof(PaymentsSummaryResponse))]
+    [JsonSerializable(typeof(PaymentServiceHealth))]
+    [JsonSerializable(typeof(List<Payments>))]
+    [JsonSerializable(typeof(List<PaymentsRequest>))]
+    [JsonSerializable(typeof(List<PaymentSummary>))]
+    [JsonSerializable(typeof(Dictionary<string, object>))]
+    [JsonSerializable(typeof(object))]
+    [JsonSerializable(typeof(string))]
+    [JsonSerializable(typeof(PaymentsRequestDTO))]
+    internal partial class AppJsonContext : JsonSerializerContext
+    {
     }
 }

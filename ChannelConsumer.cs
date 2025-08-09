@@ -6,7 +6,7 @@ using static rinha_backend.Models;
 
 namespace rinha_backend
 {
-    public class HighThroughputRedisConsumer : BackgroundService
+    internal class HighThroughputRedisConsumer : BackgroundService
     {
         private readonly IConnectionMultiplexer _redis;
         private readonly ILogger<HighThroughputRedisConsumer> _logger;
@@ -99,7 +99,7 @@ namespace rinha_backend
                         {
                             if (!value.IsNullOrEmpty)
                             {
-                                var message = JsonSerializer.Deserialize<Payments>(value.ToString());
+                                var message = JsonSerializer.Deserialize<Payments>(value.ToString(), AppJsonContext.Default.Payments);
                                 await writer.WriteAsync(message, stoppingToken);
                             }
                         }
@@ -135,7 +135,7 @@ namespace rinha_backend
 
                     if (!await _processor.SendPayment(message))
                     {
-                        await db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message));
+                        await db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message, AppJsonContext.Default.Payments));
                     }
                 }
                 catch (Exception ex)
@@ -228,3 +228,5 @@ namespace rinha_backend
         public int ProducerCount { get; set; } = 10; // 0 = automático
     }
 }
+
+
