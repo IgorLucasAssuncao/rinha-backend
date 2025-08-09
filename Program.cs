@@ -23,7 +23,10 @@ namespace rinha_backend
 
             builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
-                var options = ConfigurationOptions.Parse("localhost:6379");
+                var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "redis:6379";
+
+                var options = ConfigurationOptions.Parse(redisConnection);
+
                 options.AbortOnConnectFail = false;
                 options.ConnectRetry = 3;
                 options.SyncTimeout = 5000;
