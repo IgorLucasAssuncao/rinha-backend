@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Dapper;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -17,16 +18,20 @@ namespace rinha_backend
         private readonly int _producerCount;
         private readonly int _batchSize;
         private readonly AdaptivePollingStrategy _pollingStrategy;
+        private readonly IConfiguration _config;
 
         public HighThroughputRedisConsumer(
             IConnectionMultiplexer redis,
             ILogger<HighThroughputRedisConsumer> logger,
             PaymentProcessor processor,
-            IOptions<RedisConsumerOptions> options)
+            IOptions<RedisConsumerOptions> options,
+            IConfiguration appConfig)
         {
             _redis = redis;
             _logger = logger;
             _processor = processor;
+
+            _config = appConfig;
 
             var config = options.Value;
             _queueName = config.QueueName;
@@ -133,9 +138,33 @@ namespace rinha_backend
                 {
                     var db = _redis.GetDatabase();
 
-                    if (!await _processor.SendPayment(message))
+                    var paymentResult = await _processor.SendPayment(message);
+
+                    if (!paymentResult.Item1)
                     {
                         await db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message, AppJsonContext.Default.Payments));
+                    }else
+                    {
+                        await using var conn = new Npgsql.NpgsqlConnection(_config.GetConnectionString("postgres")!);
+                        await conn.OpenAsync();
+
+                        const string insertSql = @"
+                        INSERT INTO payments (CorrelationId, Amount, IsDefault, RequestedAt) 
+                        VALUES (@CorrelationId, @Amount, @IsDefault, @RequestedAt)
+                        ON CONFLICT (CorrelationId) DO NOTHING";
+
+                        var payment = new Payments
+                        {
+                            CorrelationId = message.CorrelationId,
+                            Amount = message.Amount,
+                            IsDefault = paymentResult.Item2 == "default"? true : false, 
+                            RequestedAt = DateTimeOffset.Now
+                        };
+
+                        await conn.ExecuteAsync(insertSql, payment);
+
+                        _logger.LogInformation("Payment inserido: {CorrelationId}, Amount: {Amount}",
+                            payment.CorrelationId, payment.Amount);
                     }
                 }
                 catch (Exception ex)

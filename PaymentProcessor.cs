@@ -15,27 +15,28 @@ namespace rinha_backend
             _paymentDecider = paymentDecider;
         }
 
-        public async Task<bool> SendPayment(Payments payment)
+        public async Task<(bool, string)> SendPayment(Payments payment)
         {
             var bestService = _paymentDecider.GetBestClient();
 
             if (string.IsNullOrEmpty(bestService))
             {
-                return false; 
+                return (false, ""); 
             }
 
             if (await TrySendPayment(bestService, payment))
-                return true;
+                return (true, bestService);
 
             var fallbackService = bestService == "default" ? "fallback" : "default";
             var fallbackStatus = _paymentDecider.GetServiceStatus(fallbackService);
 
             if (fallbackStatus?.IsFailing == false)
             {
-                return await TrySendPayment(fallbackService, payment);
+                var result = await TrySendPayment(fallbackService, payment);
+                return (result, fallbackService);
             }
 
-            return false; 
+            return (false, ""); 
         }
 
         private async Task<bool> TrySendPayment(string serviceName, Payments payment)

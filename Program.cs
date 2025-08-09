@@ -2,6 +2,7 @@ using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using MySql.Data.MySqlClient;
+using Npgsql;
 using StackExchange.Redis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -16,8 +17,6 @@ namespace rinha_backend
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateSlimBuilder(args);
-
-            //builder.Services.AddControllers();
 
             #region Redis
 
@@ -50,7 +49,9 @@ namespace rinha_backend
 
             #endregion
 
-            var mySqlconn = builder.Configuration.GetConnectionString("postgres");
+            var postgresConn = builder.Configuration.GetConnectionString("postgres")!;
+
+            builder.Services.AddSingleton(sp => postgresConn);
 
             builder.Services.AddHttpClient("default", o =>
                 o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("default")!));
@@ -60,8 +61,6 @@ namespace rinha_backend
 
 
             var app = builder.Build();
-
-            //app.UseAuthorization();
 
             app.MapPost("/payments", async ([FromBody] PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis) =>
             {
@@ -75,7 +74,7 @@ namespace rinha_backend
             app.MapGet("/payments-summary", async (DateTimeOffset? from, DateTimeOffset? to) =>
             {
 
-                await using var conn = new MySqlConnection(mySqlconn);
+                await using var conn = new NpgsqlConnection(postgresConn);
                 await conn.OpenAsync();
 
                 var query = @"
@@ -105,13 +104,11 @@ namespace rinha_backend
 
             app.MapPost("/purge-payments", async () =>
             {
-                await using var conn = new MySqlConnection(mySqlconn);
+                await using var conn = new NpgsqlConnection(postgresConn);
                 await conn.OpenAsync();
                 const string sql = "TRUNCATE TABLE payments";
                 await conn.ExecuteAsync(sql);
             });
-
-           // app.MapControllers();
 
             app.Run();
         }
