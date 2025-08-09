@@ -1,36 +1,23 @@
-# See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
-
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS base
+USER $APP_UID
 WORKDIR /app
-
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-WORKDIR /src
-
 EXPOSE 5000
 
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
 COPY ["rinha-backend.csproj", "."]
-RUN dotnet restore "rinha-backend.csproj"
-
+RUN dotnet restore "rinha-backend.csproj" --runtime linux-x64
 COPY . .
-
-WORKDIR "/src/"
-RUN dotnet build "rinha-backend.csproj" -c Release -o /app/build
+WORKDIR "/src"
+RUN dotnet build "rinha-backend.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "rinha-backend.csproj" \
-  -c Release \
-  --self-contained false \
-  -o /app/publish
-
-RUN rm -f /app/publish/*.dbg /app/publish/*.Development.json
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "rinha-backend.csproj" -c $BUILD_CONFIGURATION --runtime linux-x64 -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
-EXPOSE 5000
 ENV ASPNETCORE_URLS=http://+:5000
-
 COPY --from=publish /app/publish .
-
-USER root
-
 ENTRYPOINT ["dotnet", "rinha-backend.dll"]

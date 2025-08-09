@@ -7,10 +7,6 @@
 		<RootNamespace>rinha_backend</RootNamespace>
 		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 		<DockerfileContext>.</DockerfileContext>
-
-		<!-- AOT - APENAS ESSAS LINHAS -->
-		<PublishAot>true</PublishAot>
-		<InvariantGlobalization>true</InvariantGlobalization>
 	</PropertyGroup>
 
 	<ItemGroup>
