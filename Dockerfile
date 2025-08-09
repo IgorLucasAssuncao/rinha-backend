@@ -6,11 +6,10 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-# Backend Port - CONSISTENTE
 EXPOSE 5000
 
 COPY ["rinha-backend.csproj", "."]
-RUN dotnet restore "rinha-backend.csproj" --runtime linux-x64
+RUN dotnet restore "rinha-backend.csproj"
 
 COPY . .
 
@@ -18,13 +17,10 @@ WORKDIR "/src/"
 RUN dotnet build "rinha-backend.csproj" -c Release -o /app/build
 
 FROM build AS publish
-# AOT corrigido - REMOVIDO UseAppHost=false
 RUN dotnet publish "rinha-backend.csproj" \
--c Release \
---self-contained true \
--r linux-x64 \
--o /app/publish \
-/p:PublishAot=true
+  -c Release \
+  --self-contained false \
+  -o /app/publish
 
 RUN rm -f /app/publish/*.dbg /app/publish/*.Development.json
 
@@ -37,4 +33,4 @@ COPY --from=publish /app/publish .
 
 USER root
 
-ENTRYPOINT ["./rinha-backend"]
+ENTRYPOINT ["dotnet", "rinha-backend.dll"]
