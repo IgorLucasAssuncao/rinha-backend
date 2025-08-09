@@ -86,7 +86,7 @@ namespace rinha_backend
                       return result";
 
                     var prepared = LuaScript.Prepare(luaScript);
-                    var values = (RedisValue[])await db.ScriptEvaluateAsync(
+                    var values = (RedisValue[]?)await db.ScriptEvaluateAsync(
                         prepared,
                         new { key = (RedisKey)_queueName, batchSize = currentBatchSize }
                     );
@@ -131,7 +131,12 @@ namespace rinha_backend
             {
                 try
                 {
-                    await _processor.SendPayment(message);
+                    var db = _redis.GetDatabase();
+
+                    if (!await _processor.SendPayment(message))
+                    {
+                        await db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -155,10 +160,7 @@ namespace rinha_backend
                         "Status da fila: {QueueLength} itens no Redis, {ChannelItems} itens no channel",
                         queueLength, channelItems);
 
-                    // Ajustar dinamicamente o número de consumidores se necessário
-                    // (implementação avançada)
-
-                    await Task.Delay(10000, stoppingToken); // Monitorar a cada 10 segundos
+                    await Task.Delay(10000, stoppingToken); 
                 }
                 catch (Exception ex)
                 {
@@ -222,7 +224,7 @@ namespace rinha_backend
         public int BatchSize { get; set; } = 50; 
 
         public int ChannelCapacity { get; set; } = 5000;
-        public int ConsumerCount { get; set; } = 0; // 0 = automático
-        public int ProducerCount { get; set; } = 0; // 0 = automático
+        public int ConsumerCount { get; set; } = 100; // 0 = automático
+        public int ProducerCount { get; set; } = 10; // 0 = automático
     }
 }

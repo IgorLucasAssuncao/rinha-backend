@@ -46,7 +46,7 @@ namespace rinha_backend
 
             #endregion
 
-            var mySqlconn = builder.Configuration.GetConnectionString("mysql");
+            var mySqlconn = builder.Configuration.GetConnectionString("postgres");
  
             builder.Services.AddHttpClient("default", o =>
                 o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("default")!));
