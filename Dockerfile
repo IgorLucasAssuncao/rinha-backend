@@ -9,18 +9,26 @@ WORKDIR /src
 RUN apt update
 RUN apt install -y clang zlib1g-dev
 
-# Backend Port
-EXPOSE 8080
+# Backend Port - CONSISTENTE
+EXPOSE 5000
 
 COPY ["rinha-backend.csproj", "."]
-RUN dotnet restore "rinha-backend.csproj"
+RUN dotnet restore "rinha-backend.csproj" --runtime linux-x64
+
 COPY . .
 
 WORKDIR "/src/"
 RUN dotnet build "rinha-backend.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "rinha-backend.csproj" -c Release --self-contained true -r linux-x64 -o /app/publish /p:PublishAot=true /p:UseAppHost=false
+# AOT corrigido - REMOVIDO UseAppHost=false
+RUN dotnet publish "rinha-backend.csproj" \
+-c Release \
+--self-contained true \
+-r linux-x64 \
+-o /app/publish \
+/p:PublishAot=true
+
 RUN rm -f /app/publish/*.dbg /app/publish/*.Development.json
 
 FROM base AS final
