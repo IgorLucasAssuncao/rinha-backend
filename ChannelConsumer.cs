@@ -162,7 +162,7 @@ namespace rinha_backend
                             CorrelationId = message.CorrelationId,
                             Amount = message.Amount,
                             IsDefault = paymentResult.Item2 == "default"? true : false, 
-                            RequestedAt = DateTimeOffset.Now
+                            RequestedAt = DateTimeOffset.Parse(message.RequestedAt)
                         };
 
                         await conn.ExecuteAsync(insertSql, payment);

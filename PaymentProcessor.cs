@@ -51,7 +51,7 @@ namespace rinha_backend
                 
                     correlationId: payment.CorrelationId,
                     amount: payment.Amount,
-                    requestedAt: DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+                    requestedAt: payment.RequestedAt
                 );
 
                 var json = JsonSerializer.Serialize(payload);

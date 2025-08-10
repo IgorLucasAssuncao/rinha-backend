@@ -67,6 +67,9 @@ namespace rinha_backend
             app.MapPost("/payments", async ([FromBody] PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis, [FromServices] ILogger<Program> logger) =>
             {
                 var db = _redis.GetDatabase();
+
+                request.RequestedAt = DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+
                 string json = JsonSerializer.Serialize(request);
                 logger.LogInformation("Enqueuing payment request: {Request}", json);
                 await db.ListLeftPushAsync("payments-queue", json);

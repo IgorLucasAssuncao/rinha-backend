@@ -45,6 +45,16 @@ namespace rinha_backend
 
             [JsonPropertyName("amount")]
             public decimal Amount { get; set; }
+
+            [JsonPropertyName("requestedAt")]
+            public string RequestedAt { get; set; }
+
+            public PaymentsRequest(Guid correlationId, decimal amount, string requestedAt)
+            {
+                CorrelationId = correlationId;
+                Amount = amount;
+                RequestedAt = requestedAt;
+            }
         }
     }
 
