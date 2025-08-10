@@ -7,7 +7,7 @@ namespace rinha_backend
 {
     internal class Models
     {
-        internal sealed record Payments
+        internal record struct Payments
         {
             public Payments()
             {
@@ -19,7 +19,7 @@ namespace rinha_backend
             public DateTimeOffset RequestedAt { get; set; }
         }
 
-        internal sealed record PaymentsRequestDTO
+        internal record struct PaymentsRequestDTO
         {
             public Guid correlationId { get; set; }
             public decimal amount { get; set; }
@@ -36,7 +36,7 @@ namespace rinha_backend
 
     internal class Requests
     {
-        internal sealed record PaymentsRequest
+        internal record struct PaymentsRequest
         {
             [JsonPropertyName("correlationId")]
             public Guid CorrelationId { get; set; }
@@ -58,7 +58,7 @@ namespace rinha_backend
 
     internal class Responses
     {
-        internal sealed record PaymentSummary
+        internal record struct PaymentSummary
         {
             public bool IsDefault { get; set; }
 
@@ -83,7 +83,7 @@ namespace rinha_backend
             }
         }
 
-        internal sealed record PaymentItem
+        internal record struct PaymentItem
         {
             [JsonPropertyName("totalRequests")]
             public int TotalRequests { get; set; }
@@ -97,7 +97,7 @@ namespace rinha_backend
                 TotalAmount = totalAmount;
             }
         }
-        internal sealed record PaymentsSummaryResponse
+        internal record struct PaymentsSummaryResponse
         {
             [JsonPropertyName("default")]
             public PaymentItem Default { get; set; }
@@ -112,7 +112,7 @@ namespace rinha_backend
             }
         }
 
-        internal sealed record PaymentServiceHealth
+        internal record struct PaymentServiceHealth
         {
             [JsonPropertyName("failing")]
             public bool IsFailing { get; set; }
