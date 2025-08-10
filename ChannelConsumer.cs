@@ -4,6 +4,7 @@ using StackExchange.Redis;
 using System.Text.Json;
 using System.Threading.Channels;
 using static rinha_backend.Models;
+using static rinha_backend.Requests;
 
 namespace rinha_backend
 {
@@ -12,7 +13,7 @@ namespace rinha_backend
         private readonly IConnectionMultiplexer _redis;
         private readonly ILogger<HighThroughputRedisConsumer> _logger;
         private readonly PaymentProcessor _processor;
-        private readonly Channel<Payments> _channel;
+        private readonly Channel<PaymentsRequest> _channel;
         private readonly string _queueName;
         private readonly int _consumerCount;
         private readonly int _producerCount;
@@ -39,7 +40,7 @@ namespace rinha_backend
             _consumerCount = config.ConsumerCount > 0 ? config.ConsumerCount : Environment.ProcessorCount * 2;
             _producerCount = config.ProducerCount > 0 ? config.ProducerCount : Math.Max(2, Environment.ProcessorCount / 2);
 
-            _channel = Channel.CreateBounded<Payments>(new BoundedChannelOptions(config.ChannelCapacity)
+            _channel = Channel.CreateBounded<PaymentsRequest>(new BoundedChannelOptions(config.ChannelCapacity)
             {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleReader = false,
@@ -104,7 +105,8 @@ namespace rinha_backend
                         {
                             if (!value.IsNullOrEmpty)
                             {
-                                var message = JsonSerializer.Deserialize<Payments>(value.ToString());
+                                var message = JsonSerializer.Deserialize<PaymentsRequest>(value.ToString());
+                                _logger.LogInformation("Producer {ProducerId} dequeued payment: {Message}", producerId, value.ToString());
                                 await writer.WriteAsync(message, stoppingToken);
                             }
                         }

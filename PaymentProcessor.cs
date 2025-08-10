@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 using static rinha_backend.Models;
+using static rinha_backend.Requests;
 
 namespace rinha_backend
 {
@@ -15,7 +16,7 @@ namespace rinha_backend
             _paymentDecider = paymentDecider;
         }
 
-        public async Task<(bool, string)> SendPayment(Payments payment)
+        public async Task<(bool, string)> SendPayment(PaymentsRequest payment)
         {
             var bestService = _paymentDecider.GetBestClient();
 
@@ -39,7 +40,7 @@ namespace rinha_backend
             return (false, ""); 
         }
 
-        private async Task<bool> TrySendPayment(string serviceName, Payments payment)
+        private async Task<bool> TrySendPayment(string serviceName, PaymentsRequest payment)
         {
             try
             {
@@ -50,7 +51,7 @@ namespace rinha_backend
                 
                     correlationId: payment.CorrelationId,
                     amount: payment.Amount,
-                    requestedAt: payment.RequestedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+                    requestedAt: DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
                 );
 
                 var json = JsonSerializer.Serialize(payload);

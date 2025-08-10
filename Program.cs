@@ -47,6 +47,8 @@ namespace rinha_backend
 
             builder.Services.AddSingleton<PaymentProcessor>();
 
+            builder.Services.AddLogging();
+
             #endregion
 
             var postgresConn = builder.Configuration.GetConnectionString("postgres")!;
@@ -62,10 +64,11 @@ namespace rinha_backend
 
             var app = builder.Build();
 
-            app.MapPost("/payments", async ([FromBody] PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis) =>
+            app.MapPost("/payments", async ([FromBody] PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis, [FromServices] ILogger<Program> logger) =>
             {
                 var db = _redis.GetDatabase();
                 string json = JsonSerializer.Serialize(request);
+                logger.LogInformation("Enqueuing payment request: {Request}", json);
                 await db.ListLeftPushAsync("payments-queue", json);
 
                 return Results.Ok();
