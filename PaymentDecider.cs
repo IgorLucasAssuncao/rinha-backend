@@ -25,8 +25,8 @@ internal class PaymentDecider
         var defaultHealth = _services.GetValueOrDefault("default");
         var fallbackHealth = _services.GetValueOrDefault("fallback");
 
-        var defaultOk = defaultHealth?.IsFailing == false;
-        var fallbackOk = fallbackHealth?.IsFailing == false;
+        var defaultOk = defaultHealth.IsFailing == false;
+        var fallbackOk = fallbackHealth.IsFailing == false;
 
         if (!defaultOk && !fallbackOk)
         {
@@ -54,7 +54,7 @@ internal class PaymentDecider
     public int GetRecommendedTimeout(string serviceName)
     {
         var health = _services.GetValueOrDefault(serviceName);
-        return (int)(health?.MinResponseTime + 1000 ?? 5000);
+        return (int)(health.MinResponseTime + 1000);
     }
 
     public PaymentServiceHealth? GetServiceStatus(string serviceName)

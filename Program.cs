@@ -98,8 +98,8 @@ namespace rinha_backend
                     to
                 });
 
-                var defaultResult = results.FirstOrDefault(r => r.IsDefault) ?? new PaymentSummary(true, 0, 0);
-                var fallbackResult = results.FirstOrDefault(r => !r.IsDefault) ?? new PaymentSummary(false, 0, 0);
+                var defaultResult = results.FirstOrDefault(r => r.IsDefault);
+                var fallbackResult = results.FirstOrDefault(r => !r.IsDefault);
 
                 var summary = new PaymentsSummaryResponse(
                     new(defaultResult.TotalRequests, defaultResult.TotalAmount),
