@@ -65,7 +65,7 @@ namespace rinha_backend
             app.MapPost("/payments", async ([FromBody] PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis) =>
             {
                 var db = _redis.GetDatabase();
-                string json = JsonSerializer.Serialize(request, AppJsonContext.Default.PaymentsRequest);
+                string json = JsonSerializer.Serialize(request);
                 await db.ListLeftPushAsync("payments-queue", json);
 
                 return Results.Ok();

@@ -53,7 +53,7 @@ namespace rinha_backend
                     requestedAt: payment.RequestedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
                 );
 
-                var json = JsonSerializer.Serialize(payload, AppJsonContext.Default.Payments);
+                var json = JsonSerializer.Serialize(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 using var cts = new CancellationTokenSource(timeout);

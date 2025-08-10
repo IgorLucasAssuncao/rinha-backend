@@ -104,7 +104,7 @@ namespace rinha_backend
                         {
                             if (!value.IsNullOrEmpty)
                             {
-                                var message = JsonSerializer.Deserialize<Payments>(value.ToString(), AppJsonContext.Default.Payments);
+                                var message = JsonSerializer.Deserialize<Payments>(value.ToString());
                                 await writer.WriteAsync(message, stoppingToken);
                             }
                         }
