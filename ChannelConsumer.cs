@@ -105,8 +105,8 @@ namespace rinha_backend
                         {
                             if (!value.IsNullOrEmpty)
                             {
-                                var message = JsonSerializer.Deserialize<PaymentsRequest>(value.ToString());
-                                _logger.LogInformation("Producer {ProducerId} dequeued payment: {Message}", producerId, value.ToString());
+                                var message = JsonSerializer.Deserialize<PaymentsRequest>(value.ToString())!;
+                                //_logger.LogInformation("Producer {ProducerId} dequeued payment: {Message}", producerId, value.ToString());
                                 await writer.WriteAsync(message, stoppingToken);
                             }
                         }
@@ -144,7 +144,7 @@ namespace rinha_backend
 
                     if (!paymentResult.Item1)
                     {
-                        _logger.LogInformation("Reenfileirando pagamento: {CorrelationId}, Amount: {Amount}", message.CorrelationId, message.Amount);
+                        // _logger.LogInformation("Reenfileirando pagamento: {CorrelationId}, Amount: {Amount}", message.CorrelationId, message.Amount);
                         await db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message, AppJsonContext.Default.Payments));
                     }
                     else
@@ -167,8 +167,8 @@ namespace rinha_backend
 
                         await conn.ExecuteAsync(insertSql, payment);
 
-                        _logger.LogInformation("Payment inserido: {CorrelationId}, Amount: {Amount}",
-                            payment.CorrelationId, payment.Amount);
+                        //_logger.LogInformation("Payment inserido: {CorrelationId}, Amount: {Amount}",
+                        //    payment.CorrelationId, payment.Amount);
                     }
                 }
                 catch (Exception ex)
@@ -256,8 +256,8 @@ namespace rinha_backend
         //Define o número de pagamentos por Channel
         public int BatchSize { get; set; } = 50; 
 
-        public int ChannelCapacity { get; set; } = 5000;
-        public int ConsumerCount { get; set; } = 100; // 0 = automático
+        public int ChannelCapacity { get; set; } = 5500;
+        public int ConsumerCount { get; set; } = 150; // 0 = automático
         public int ProducerCount { get; set; } = 10; // 0 = automático
     }
 }

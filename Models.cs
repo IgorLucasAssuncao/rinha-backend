@@ -7,20 +7,19 @@ namespace rinha_backend
 {
     internal class Models
     {
-        internal struct Payments
+        internal sealed record Payments
         {
             public Payments()
             {
             }
 
-            //Modelo do banco
             public Guid CorrelationId { get; set; }
             public decimal Amount { get; set; }
             public bool IsDefault { get; set; } = true;
             public DateTimeOffset RequestedAt { get; set; }
         }
 
-        internal struct PaymentsRequestDTO
+        internal sealed record PaymentsRequestDTO
         {
             public Guid correlationId { get; set; }
             public decimal amount { get; set; }
@@ -37,8 +36,7 @@ namespace rinha_backend
 
     internal class Requests
     {
-        //Requests do cliente
-        internal struct PaymentsRequest
+        internal sealed record PaymentsRequest
         {
             [JsonPropertyName("correlationId")]
             public Guid CorrelationId { get; set; }
@@ -60,8 +58,7 @@ namespace rinha_backend
 
     internal class Responses
     {
-        //Responses da API e do PaymentsService
-        public sealed record PaymentSummary
+        internal sealed record PaymentSummary
         {
             public bool IsDefault { get; set; }
 
@@ -100,7 +97,7 @@ namespace rinha_backend
                 TotalAmount = totalAmount;
             }
         }
-        internal record PaymentsSummaryResponse
+        internal sealed record PaymentsSummaryResponse
         {
             [JsonPropertyName("default")]
             public PaymentItem Default { get; set; }
@@ -115,7 +112,7 @@ namespace rinha_backend
             }
         }
 
-        internal record PaymentServiceHealth
+        internal sealed record PaymentServiceHealth
         {
             [JsonPropertyName("failing")]
             public bool IsFailing { get; set; }
