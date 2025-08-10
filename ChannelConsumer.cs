@@ -254,11 +254,11 @@ namespace rinha_backend
         public string QueueName { get; set; } = "payments-queue";
 
         //Define o número de pagamentos por Channel
-        public int BatchSize { get; set; } = 50; 
+        public int BatchSize { get; set; } = 25; 
 
         public int ChannelCapacity { get; set; } = 5500;
-        public int ConsumerCount { get; set; } = 150; // 0 = automático
-        public int ProducerCount { get; set; } = 10; // 0 = automático
+        public int ConsumerCount { get; set; } = 220; // 0 = automático
+        public int ProducerCount { get; set; } = 15; // 0 = automático
     }
 }
 
