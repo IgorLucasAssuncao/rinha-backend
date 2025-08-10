@@ -5,7 +5,7 @@ x-service-templates:
       resources:
         limits:
           cpus: "0.45"
-          memory: "100MB"
+          memory: "85MB"
     networks:
       - backend
       - payment-processor
@@ -50,7 +50,7 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "40MB"
+          memory: "35MB"
   rinha-db:
     image: postgres:17-alpine
     command: 'postgres -c max_connections=400 -c synchronous_commit=off -c fsync=off -c full_page_writes=off'
@@ -73,7 +73,7 @@ services:
       resources:
         limits:
           cpus: "0.3"
-          memory: "90MB"
+          memory: "115MB"
   redis:
     image: redis:8-alpine
     restart: always
@@ -96,7 +96,7 @@ services:
       resources:
         limits:
           cpus: '0.1'
-          memory: '45MB'
+          memory: '30MB'
 
 networks:
   backend:
