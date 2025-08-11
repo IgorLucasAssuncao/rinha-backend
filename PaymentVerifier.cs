@@ -45,7 +45,7 @@ namespace rinha_backend
 
                 var content = await response.Content.ReadAsStringAsync();
 
-                return JsonSerializer.Deserialize<PaymentServiceHealth>(content, AppJsonContext.Default.PaymentServiceHealth)!;
+                return JsonSerializer.Deserialize<PaymentServiceHealth>(content)!;
             }
             catch
             {

@@ -53,6 +53,14 @@ namespace rinha_backend
                 Amount = amount;
                 RequestedAt = requestedAt;
             }
+
+            [JsonConstructor]
+            public PaymentsRequest(Guid correlationId, decimal amount)
+            {
+                CorrelationId = correlationId;
+                Amount = amount;
+                RequestedAt = DateTimeOffset.UtcNow.ToString("O");
+            }
         }
     }
 

@@ -46,9 +46,17 @@ internal class PaymentDecider
             return;
         }
 
-        _bestService = defaultHealth!.MinResponseTime <= fallbackHealth!.MinResponseTime
-            ? "default"
-            : "fallback";
+        if (defaultHealth!.MinResponseTime >= 100 && fallbackHealth!.MinResponseTime >= 100)
+        {
+            _bestService = "";
+            return;
+        }
+        else
+        {
+            _bestService = defaultHealth!.MinResponseTime <= fallbackHealth!.MinResponseTime
+                ? "default"
+                : "fallback";
+        }
     }
 
     public int GetRecommendedTimeout(string serviceName)

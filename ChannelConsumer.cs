@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
+using System;
 using System.Text.Json;
 using System.Threading.Channels;
 using static rinha_backend.Models;
@@ -21,6 +22,22 @@ namespace rinha_backend
         private readonly AdaptivePollingStrategy _pollingStrategy;
         private readonly IConfiguration _config;
 
+        const string insertSql = @"
+                        INSERT INTO payments (CorrelationId, Amount, IsDefault, RequestedAt) 
+                        VALUES (@CorrelationId, @Amount, @IsDefault, @RequestedAt)
+                        ON CONFLICT (CorrelationId) DO NOTHING";
+
+        const string luaScript = @"
+                      local result = {}
+                      for i = 1, @batchSize do
+                          local item = redis.call('RPOP', @key)
+                          if not item then break end
+                          table.insert(result, item)
+                      end
+                      return result";
+
+        private readonly LuaScript _preparedScript;
+
         public HighThroughputRedisConsumer(
             IConnectionMultiplexer redis,
             ILogger<HighThroughputRedisConsumer> logger,
@@ -33,6 +50,7 @@ namespace rinha_backend
             _processor = processor;
 
             _config = appConfig;
+            _preparedScript = LuaScript.Prepare(luaScript);
 
             var config = options.Value;
             _queueName = config.QueueName;
@@ -44,7 +62,7 @@ namespace rinha_backend
             {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleReader = false,
-                SingleWriter = true
+                SingleWriter = true 
             });
 
             _pollingStrategy = new AdaptivePollingStrategy(
@@ -65,9 +83,9 @@ namespace rinha_backend
                 consumerTasks[i] = ConsumeAsync(i, stoppingToken);
             
 
-            var monitorTask = MonitorQueueAsync(stoppingToken);
+            //var monitorTask = MonitorQueueAsync(stoppingToken);
 
-            await Task.WhenAll(producerTasks.Concat(consumerTasks).Append(monitorTask).ToArray());
+            await Task.WhenAll(producerTasks.Concat(consumerTasks)/*.Append(monitorTask)*/.ToArray());
         }
 
         private async Task ProduceAsync(int producerId, CancellationToken stoppingToken)
@@ -82,18 +100,8 @@ namespace rinha_backend
                 {
                     int currentBatchSize = CalculateDynamicBatchSize(emptyBatchCount);
 
-                    var luaScript = @"
-                      local result = {}
-                      for i = 1, @batchSize do
-                          local item = redis.call('RPOP', @key)
-                          if not item then break end
-                          table.insert(result, item)
-                      end
-                      return result";
-
-                    var prepared = LuaScript.Prepare(luaScript);
                     var values = (RedisValue[]?)await db.ScriptEvaluateAsync(
-                        prepared,
+                        _preparedScript,
                         new { key = (RedisKey)_queueName, batchSize = currentBatchSize }
                     );
 
@@ -106,16 +114,10 @@ namespace rinha_backend
                             if (!value.IsNullOrEmpty)
                             {
                                 var message = JsonSerializer.Deserialize<PaymentsRequest>(value.ToString())!;
-                                //_logger.LogInformation("Producer {ProducerId} dequeued payment: {Message}", producerId, value.ToString());
+                                _logger.LogInformation($"{message.Amount} - {message.CorrelationId} - {message.RequestedAt}");
                                 await writer.WriteAsync(message, stoppingToken);
                             }
                         }
-                    }
-                    else
-                    {
-                        emptyBatchCount++;
-                        TimeSpan delay = _pollingStrategy.GetNextDelay(emptyBatchCount);
-                        await Task.Delay(delay, stoppingToken);
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -133,74 +135,143 @@ namespace rinha_backend
         private async Task ConsumeAsync(int consumerId, CancellationToken stoppingToken)
         {
             var reader = _channel.Reader;
+            var db = _redis.GetDatabase();
 
             await foreach (var message in reader.ReadAllAsync(stoppingToken))
             {
+                (bool, string) paymentResult = default;
                 try
                 {
-                    var db = _redis.GetDatabase();
-
-                    var paymentResult = await _processor.SendPayment(message);
+                    var json = JsonSerializer.Serialize(message);
+                    paymentResult = await _processor.SendPayment(json);
 
                     if (!paymentResult.Item1)
                     {
-                        // _logger.LogInformation("Reenfileirando pagamento: {CorrelationId}, Amount: {Amount}", message.CorrelationId, message.Amount);
-                        await db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message, AppJsonContext.Default.Payments));
+                        _ = db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message));
                     }
                     else
                     {
                         await using var conn = new Npgsql.NpgsqlConnection(_config.GetConnectionString("postgres")!);
                         await conn.OpenAsync();
 
-                        const string insertSql = @"
-                        INSERT INTO payments (CorrelationId, Amount, IsDefault, RequestedAt) 
-                        VALUES (@CorrelationId, @Amount, @IsDefault, @RequestedAt)
-                        ON CONFLICT (CorrelationId) DO NOTHING";
-
                         var payment = new Payments
                         {
                             CorrelationId = message.CorrelationId,
                             Amount = message.Amount,
-                            IsDefault = paymentResult.Item2 == "default"? true : false, 
+                            IsDefault = paymentResult.Item2 == "default" ? true : false,
                             RequestedAt = DateTimeOffset.Parse(message.RequestedAt)
                         };
 
                         await conn.ExecuteAsync(insertSql, payment);
-
-                        //_logger.LogInformation("Payment inserido: {CorrelationId}, Amount: {Amount}",
-                        //    payment.CorrelationId, payment.Amount);
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Erro ao processar mensagem no consumidor {ConsumerId}", consumerId);
+                    _logger.LogError($"{paymentResult.Item1} - {paymentResult.Item2}");
                 }
             }
         }
 
         private async Task MonitorQueueAsync(CancellationToken stoppingToken)
         {
+            _logger.LogInformation("Monitor de fila e sistema iniciado");
             var db = _redis.GetDatabase();
+            var startTime = DateTime.UtcNow;
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
+                    // ✅ Métricas da fila (original)
                     long queueLength = await db.ListLengthAsync(_queueName);
                     int channelItems = _channel.Reader.Count;
 
-                    _logger.LogInformation(
-                        "Status da fila: {QueueLength} itens no Redis, {ChannelItems} itens no channel",
-                        queueLength, channelItems);
+                    // ✅ Métricas de ThreadPool
+                    ThreadPool.GetAvailableThreads(out int availableWorker, out int availableIO);
+                    ThreadPool.GetMaxThreads(out int maxWorker, out int maxIO);
+                    ThreadPool.GetMinThreads(out int minWorker, out int minIO);
+                    var usedWorker = maxWorker - availableWorker;
+                    var usedIO = maxIO - availableIO;
 
-                    await Task.Delay(10000, stoppingToken); 
+                    // ✅ Métricas do processo
+                    var process = System.Diagnostics.Process.GetCurrentProcess();
+                    var processThreads = process.Threads.Count;
+                    var workingSet = process.WorkingSet64 / 1024 / 1024; // MB
+                    var cpuTime = process.TotalProcessorTime.TotalSeconds;
+
+                    // ✅ Métricas de GC
+                    var gen0Collections = GC.CollectionCount(0);
+                    var gen1Collections = GC.CollectionCount(1);
+                    var gen2Collections = GC.CollectionCount(2);
+                    var totalMemory = GC.GetTotalMemory(false) / 1024 / 1024; // MB
+
+                    // ✅ Contagem aproximada de tasks ativas
+                    var activeTasks = _producerCount + _consumerCount + 1; // Producers + Consumers + Monitor
+
+                    // ✅ Uptime
+                    var uptime = DateTime.UtcNow - startTime;
+
+                    // ✅ Log expandido
+                    _logger.LogInformation(
+                        "📊 SYSTEM MONITOR | " +
+                        "Uptime: {Uptime:hh\\:mm\\:ss} | " +
+                        "Queue: Redis:{QueueLength} Channel:{ChannelItems}/{ChannelCapacity} | " +
+                        "Tasks: {ActiveTasks} active | " +
+                        "ThreadPool: Worker:{UsedWorker}/{MaxWorker} (min:{MinWorker}) IO:{UsedIO}/{MaxIO} (min:{MinIO}) | " +
+                        "Process: {ProcessThreads} threads | " +
+                        "Memory: Working:{WorkingSet}MB GC:{TotalMemory}MB | " +
+                        "GC Collections: G0:{Gen0} G1:{Gen1} G2:{Gen2} | " +
+                        "CPU Time: {CpuTime:F1}s",
+
+                        uptime,
+                        queueLength, channelItems, 15000, // assumindo capacidade padrão
+                        activeTasks,
+                        usedWorker, maxWorker, minWorker, usedIO, maxIO, minIO,
+                        processThreads,
+                        workingSet, totalMemory,
+                        gen0Collections, gen1Collections, gen2Collections,
+                        cpuTime);
+
+                    // ✅ Warnings automáticos
+                    if (queueLength > 1000)
+                        _logger.LogWarning("⚠️ Fila Redis crescendo: {QueueLength} itens", queueLength);
+
+                    if (channelItems > 12000) // 80% da capacidade padrão
+                        _logger.LogWarning("⚠️ Channel próximo da capacidade: {ChannelItems} itens", channelItems);
+
+                    if (usedWorker > maxWorker * 0.8)
+                        _logger.LogWarning("⚠️ Alta utilização de worker threads: {UsedWorker}/{MaxWorker} ({Percentage:F1}%)",
+                            usedWorker, maxWorker, (usedWorker * 100.0 / maxWorker));
+
+                    if (workingSet > 150) // 150MB
+                        _logger.LogWarning("⚠️ Alto consumo de memória: {WorkingSet}MB", workingSet);
+
+                    if (gen2Collections > 0 && uptime.TotalMinutes > 1) // GC Gen2 após 1min de uptime
+                        _logger.LogWarning("⚠️ GC Gen2 collections detectadas: {Gen2Collections}", gen2Collections);
+
+                    // ✅ Log adicional de performance a cada 1 minuto
+                    if (uptime.TotalSeconds % 60 < 10) // aproximadamente a cada minuto
+                    {
+                        var avgCpuPerSecond = cpuTime / uptime.TotalSeconds;
+                        _logger.LogInformation(
+                            "📈 Performance Summary | " +
+                            "Avg CPU: {AvgCpu:F2}s/s | " +
+                            "Throughput: Redis reads, Channel writes | " +
+                            "Memory trend: {MemoryTrend}MB working set",
+                            avgCpuPerSecond, workingSet);
+                    }
+
+                    await Task.Delay(1000, stoppingToken);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Erro ao monitorar fila");
-                    await Task.Delay(30000, stoppingToken);
+                    _logger.LogError(ex, "Erro ao monitorar fila e sistema");
+                    await Task.Delay(1000, stoppingToken);
                 }
             }
+
+            _logger.LogInformation("Monitor de fila e sistema finalizado");
         }
 
         private int CalculateDynamicBatchSize(int emptyBatchCount)
@@ -210,7 +281,7 @@ namespace rinha_backend
             if (emptyBatchCount > 5)
                 return _batchSize / 2;
             if (emptyBatchCount == 0)
-                return _batchSize * 2; 
+                return _batchSize * 2;
 
             return _batchSize;
         }
@@ -254,11 +325,10 @@ namespace rinha_backend
         public string QueueName { get; set; } = "payments-queue";
 
         //Define o número de pagamentos por Channel
-        public int BatchSize { get; set; } = 25; 
-
+        public int BatchSize { get; set; } = 15;
         public int ChannelCapacity { get; set; } = 5500;
-        public int ConsumerCount { get; set; } = 220; // 0 = automático
-        public int ProducerCount { get; set; } = 15; // 0 = automático
+        public int ConsumerCount { get; set; } = 3; 
+        public int ProducerCount { get; set; } = 1; 
     }
 }
 

@@ -16,7 +16,7 @@ namespace rinha_backend
             _paymentDecider = paymentDecider;
         }
 
-        public async Task<(bool, string)> SendPayment(PaymentsRequest payment)
+        public async Task<(bool, string)> SendPayment(string payment)
         {
             var bestService = _paymentDecider.GetBestClient();
 
@@ -28,34 +28,26 @@ namespace rinha_backend
             if (await TrySendPayment(bestService, payment))
                 return (true, bestService);
 
-            var fallbackService = bestService == "default" ? "fallback" : "default";
-            var fallbackStatus = _paymentDecider.GetServiceStatus(fallbackService);
+            //var fallbackService = bestService == "default" ? "fallback" : "default";
+            //var fallbackStatus = _paymentDecider.GetServiceStatus(fallbackService);
 
-            if (fallbackStatus?.IsFailing == false)
-            {
-                var result = await TrySendPayment(fallbackService, payment);
-                return (result, fallbackService);
-            }
+            //if (fallbackStatus?.IsFailing == false)
+            //{
+            //    var result = await TrySendPayment(fallbackService, payment);
+            //    return (result, fallbackService);
+            //}
 
             return (false, ""); 
         }
 
-        private async Task<bool> TrySendPayment(string serviceName, PaymentsRequest payment)
+        private async Task<bool> TrySendPayment(string serviceName, string payment)
         {
             try
             {
                 var client = _httpClientFactory.CreateClient(serviceName);
                 var timeout = _paymentDecider.GetRecommendedTimeout(serviceName);
 
-                var payload = new PaymentsRequestDTO(
-                
-                    correlationId: payment.CorrelationId,
-                    amount: payment.Amount,
-                    requestedAt: payment.RequestedAt
-                );
-
-                var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var content = new StringContent(payment, Encoding.UTF8, "application/json");
 
                 using var cts = new CancellationTokenSource(timeout);
                 var response = await client.PostAsync("/payments", content, cts.Token);

@@ -1,6 +1,7 @@
 x-service-templates:
   backend: &backend
     image: ghcr.io/igorlucasassuncao/rinha-backend:latest
+   # build: .
     deploy:
       resources:
         limits:
@@ -75,28 +76,28 @@ services:
           cpus: "0.3"
           memory: "115MB"
   redis:
-    image: redis:8-alpine
-    restart: always
-    hostname: redis
-    container_name: redis 
-    command: >
-      redis-server --save "" --appendonly no --maxclients 1024
-                  --maxmemory 35mb --maxmemory-policy allkeys-lru 
-                  --stop-writes-on-bgsave-error no --rdbcompression no
-                  --hz 100 --tcp-backlog 511 --timeout 0
-                  --loglevel warning
-    networks:
-      - backend
-    healthcheck:
-          test: ["CMD", "redis-cli", "ping"]
-          interval: 2s
-          timeout: 2s
-          retries: 10
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
-          memory: '30MB'
+   image: redis:8-alpine
+   restart: always
+   hostname: redis
+   container_name: redis 
+   command: >
+       redis-server --save "" --appendonly no --maxclients 1024
+                --maxmemory 30mb --maxmemory-policy allkeys-lru 
+                --stop-writes-on-bgsave-error no --rdbcompression no
+                --hz 100 --tcp-backlog 511 --timeout 0
+                --loglevel warning
+   networks:
+    - backend
+   healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 2s
+        timeout: 2s
+        retries: 10
+   deploy:
+    resources:
+      limits:
+        cpus: '0.1'
+        memory: '30MB'
 
 networks:
   backend:

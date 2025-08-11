@@ -1,33 +1,33 @@
 ﻿#!/bin/bash
-echo "🧹 Limpeza Docker Segura"
+echo "🧹 Limpeza Docker Seletiva (Preservando Imagens Microsoft)"
 
-# Parar containers em execução
+# Parar containers
 echo "🛑 Parando containers ativos..."
 docker stop $(docker ps -q) 2>/dev/null || true
 
-# Remover containers parados
+# Limpar containers
 echo "🗑️ Removendo containers parados..."
 docker container prune -f
 
-# Remover imagens não utilizadas
-echo "🖼️ Removendo imagens não utilizadas..."
-docker image prune -f
+# ✅ SOLUÇÃO SIMPLES: Remover por filtro negativo
+echo "🔥 Removendo imagens (preservando Microsoft)..."
+docker images | grep -v "mcr.microsoft.com" | grep -v "REPOSITORY" | awk '{print $3}' | sort -u | xargs -r docker rmi --force 2>/dev/null || true
 
-# NOVO: Remover TODAS as imagens
-echo "🔥 Removendo TODAS as imagens..."
-docker rmi $(docker images -aq) --force 2>/dev/null || true
-
-# Remover volumes órfãos
+# Limpar resto
 echo "💾 Removendo volumes órfãos..."
 docker volume prune -f
 
-# Remover redes não utilizadas
 echo "🌐 Removendo redes não utilizadas..."
 docker network prune -f
 
-# Limpar cache de build
 echo "⚡ Limpando cache de build..."
 docker builder prune -f
 
-echo "✅ Limpeza segura concluída!"
+# Mostrar resultado
+echo ""
+echo "📋 Imagens Microsoft preservadas:"
+docker images | grep "mcr.microsoft.com"
+
+echo ""
+echo "✅ Limpeza seletiva concluída!"
 docker system df

@@ -64,16 +64,13 @@ namespace rinha_backend
 
             var app = builder.Build();
 
-            app.MapPost("/payments", async ([FromBody] PaymentsRequest request, [FromServices] IConnectionMultiplexer _redis /*[FromServices] ILogger<Program> logger*/) =>
+            app.MapPost("/payments", async (HttpContext context, [FromServices] IConnectionMultiplexer _redis /*[FromServices] ILogger<Program> logger*/) =>
             {
                 var db = _redis.GetDatabase();
+                using var reader = new StreamReader(context.Request.Body);
+                var json = await reader.ReadToEndAsync();
 
-                request.RequestedAt = DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-
-                string json = JsonSerializer.Serialize(request);
-                //logger.LogInformation("Enqueuing payment request: {Request}", json);
-                await db.ListLeftPushAsync("payments-queue", json);
-
+                _ = db.ListLeftPushAsync("payments-queue", json);
                 return Results.Ok();
             });
 
@@ -118,22 +115,5 @@ namespace rinha_backend
 
             app.Run();
         }
-    }
-
-    [JsonSerializable(typeof(Payments))]
-    [JsonSerializable(typeof(PaymentsRequest))]
-    [JsonSerializable(typeof(PaymentSummary))]
-    [JsonSerializable(typeof(PaymentItem))]
-    [JsonSerializable(typeof(PaymentsSummaryResponse))]
-    [JsonSerializable(typeof(PaymentServiceHealth))]
-    [JsonSerializable(typeof(List<Payments>))]
-    [JsonSerializable(typeof(List<PaymentsRequest>))]
-    [JsonSerializable(typeof(List<PaymentSummary>))]
-    [JsonSerializable(typeof(Dictionary<string, object>))]
-    [JsonSerializable(typeof(object))]
-    [JsonSerializable(typeof(string))]
-    [JsonSerializable(typeof(PaymentsRequestDTO))]
-    internal partial class AppJsonContext : JsonSerializerContext
-    {
     }
 }
