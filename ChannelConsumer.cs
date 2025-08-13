@@ -22,11 +22,6 @@ namespace rinha_backend
         private readonly AdaptivePollingStrategy _pollingStrategy;
         private readonly IConfiguration _config;
 
-        const string insertSql = @"
-                        INSERT INTO payments (CorrelationId, Amount, IsDefault, RequestedAt) 
-                        VALUES (@CorrelationId, @Amount, @IsDefault, @RequestedAt)
-                        ON CONFLICT (CorrelationId) DO NOTHING";
-
         const string luaScript = @"
                       local result = {}
                       for i = 1, @batchSize do
@@ -114,7 +109,6 @@ namespace rinha_backend
                             if (!value.IsNullOrEmpty)
                             {
                                 var message = JsonSerializer.Deserialize<PaymentsRequest>(value.ToString())!;
-                                _logger.LogInformation($"{message.Amount} - {message.CorrelationId} - {message.RequestedAt}");
                                 await writer.WriteAsync(message, stoppingToken);
                             }
                         }
@@ -127,7 +121,7 @@ namespace rinha_backend
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Erro no produtor {ProducerId}", producerId);
-                    await Task.Delay(1000, stoppingToken);
+                    await Task.Delay(500, stoppingToken);
                 }
             }
         }
@@ -139,36 +133,19 @@ namespace rinha_backend
 
             await foreach (var message in reader.ReadAllAsync(stoppingToken))
             {
-                (bool, string) paymentResult = default;
+                bool paymentResult = default;
                 try
                 {
-                    var json = JsonSerializer.Serialize(message);
-                    paymentResult = await _processor.SendPayment(json);
+                    paymentResult = await _processor.SendPayment(message, _config.GetConnectionString("postgres")!);
 
-                    if (!paymentResult.Item1)
+                    if (!paymentResult)
                     {
                         _ = db.ListRightPushAsync((RedisKey)_queueName, (RedisValue)JsonSerializer.Serialize(message));
-                    }
-                    else
-                    {
-                        await using var conn = new Npgsql.NpgsqlConnection(_config.GetConnectionString("postgres")!);
-                        await conn.OpenAsync();
-
-                        var payment = new Payments
-                        {
-                            CorrelationId = message.CorrelationId,
-                            Amount = message.Amount,
-                            IsDefault = paymentResult.Item2 == "default" ? true : false,
-                            RequestedAt = DateTimeOffset.Parse(message.RequestedAt)
-                        };
-
-                        await conn.ExecuteAsync(insertSql, payment);
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Erro ao processar mensagem no consumidor {ConsumerId}", consumerId);
-                    _logger.LogError($"{paymentResult.Item1} - {paymentResult.Item2}");
                 }
             }
         }

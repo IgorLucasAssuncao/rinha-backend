@@ -1,5 +1,8 @@
-﻿using System.Text;
+﻿using Dapper;
+using Org.BouncyCastle.Asn1;
+using System.Text;
 using System.Text.Json;
+using static Org.BouncyCastle.Math.EC.ECCurve;
 using static rinha_backend.Models;
 using static rinha_backend.Requests;
 
@@ -9,6 +12,11 @@ namespace rinha_backend
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly PaymentDecider _paymentDecider;
+        const string insertSql = @"
+                        INSERT INTO payments (CorrelationId, Amount, IsDefault, RequestedAt) 
+                        VALUES (@CorrelationId, @Amount, @IsDefault, @RequestedAt)
+                        ON CONFLICT (CorrelationId) DO NOTHING";
+
 
         public PaymentProcessor(IHttpClientFactory factory, PaymentDecider paymentDecider)
         {
@@ -16,28 +24,34 @@ namespace rinha_backend
             _paymentDecider = paymentDecider;
         }
 
-        public async Task<(bool, string)> SendPayment(string payment)
+        public async Task<bool> SendPayment(PaymentsRequest payment, string connectionPgSql)
         {
             var bestService = _paymentDecider.GetBestClient();
+            var json = JsonSerializer.Serialize(payment);
 
             if (string.IsNullOrEmpty(bestService))
             {
-                return (false, ""); 
+                return false;
             }
 
-            if (await TrySendPayment(bestService, payment))
-                return (true, bestService);
+            if (await TrySendPayment(bestService, json))
+            {
+                await using var conn = new Npgsql.NpgsqlConnection(connectionPgSql!);
+                await conn.OpenAsync();
 
-            //var fallbackService = bestService == "default" ? "fallback" : "default";
-            //var fallbackStatus = _paymentDecider.GetServiceStatus(fallbackService);
+                var paymentDb = new Payments
+                {
+                    CorrelationId = payment.CorrelationId,
+                    Amount = payment.Amount,
+                    IsDefault = bestService == "default" ? true : false,
+                    RequestedAt = DateTimeOffset.Parse(payment.RequestedAt)
+                };
 
-            //if (fallbackStatus?.IsFailing == false)
-            //{
-            //    var result = await TrySendPayment(fallbackService, payment);
-            //    return (result, fallbackService);
-            //}
+                await conn.ExecuteAsync(insertSql, paymentDb);
+                return true;
+            }
 
-            return (false, ""); 
+            return false; 
         }
 
         private async Task<bool> TrySendPayment(string serviceName, string payment)

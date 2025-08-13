@@ -53,6 +53,8 @@ namespace rinha_backend
 
             var postgresConn = builder.Configuration.GetConnectionString("postgres")!;
 
+            builder.Logging.SetMinimumLevel(LogLevel.None);
+
             builder.Services.AddSingleton(sp => postgresConn);
 
             builder.Services.AddHttpClient("default", o =>
