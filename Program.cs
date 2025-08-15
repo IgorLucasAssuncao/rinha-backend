@@ -1,11 +1,16 @@
-using Dapper;
+﻿using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using MySql.Data.MySqlClient;
 using Npgsql;
+using Npgsql.Internal;
+using Polly;
+using Polly.Extensions.Http;
 using StackExchange.Redis;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Channels;
 using static rinha_backend.Models;
 using static rinha_backend.Requests;
 using static rinha_backend.Responses;
@@ -17,25 +22,21 @@ namespace rinha_backend
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateSlimBuilder(args);
+            builder.Configuration.AddEnvironmentVariables();
+
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                var socketPath = Environment.GetEnvironmentVariable("SOCKET_PATH") ?? "/tmp/backend.sock";
+
+                options.ListenUnixSocket(socketPath);
+
+                if (builder.Environment.IsDevelopment())
+                {
+                    options.ListenLocalhost(5000);
+                }
+            });
 
             #region Redis
-
-            builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-            {
-                var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "redis:6379";
-
-                var options = ConfigurationOptions.Parse(redisConnection);
-
-                options.AbortOnConnectFail = false;
-                options.ConnectRetry = 3;
-                options.SyncTimeout = 5000;
-                options.ConnectTimeout = 5000;
-                options.KeepAlive = 60;
-
-                options.SocketManager = new SocketManager(workerCount: Environment.ProcessorCount);
-
-                return ConnectionMultiplexer.Connect(options);
-            });
 
             builder.Services.AddOptions<IOptions<RedisConsumerOptions>>();
 
@@ -47,15 +48,15 @@ namespace rinha_backend
 
             builder.Services.AddSingleton<PaymentProcessor>();
 
-            builder.Services.AddLogging();
-
             #endregion
 
             var postgresConn = builder.Configuration.GetConnectionString("postgres")!;
 
-            builder.Logging.SetMinimumLevel(LogLevel.None);
-
-            builder.Services.AddSingleton(sp => postgresConn);
+            builder.Services.AddSingleton(provider =>
+            {
+                var dataSourceBuilder = new NpgsqlDataSourceBuilder(postgresConn);
+                return dataSourceBuilder.Build();
+            });
 
             builder.Services.AddHttpClient("default", o =>
                 o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("default")!));
@@ -63,16 +64,37 @@ namespace rinha_backend
             builder.Services.AddHttpClient("fallback", o =>
                 o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!));
 
+            builder.Services.AddSingleton(provider =>
+            {
+                var options = new UnboundedChannelOptions()
+                {
+                    SingleReader = false,
+                    SingleWriter = false,
+                    AllowSynchronousContinuations = true
+                };
+                return Channel.CreateUnbounded<PaymentsRequest>(options);
+            });
+
+            builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<Channel<PaymentsRequest>>().Writer);
+
+            builder.Services.AddSingleton(provider =>
+                provider.GetRequiredService<Channel<PaymentsRequest>>().Reader);
 
             var app = builder.Build();
 
-            app.MapPost("/payments", async (HttpContext context, [FromServices] IConnectionMultiplexer _redis /*[FromServices] ILogger<Program> logger*/) =>
+            app.Lifetime.ApplicationStarted.Register(() =>
             {
-                var db = _redis.GetDatabase();
-                using var reader = new StreamReader(context.Request.Body);
-                var json = await reader.ReadToEndAsync();
+                var socketPath = Environment.GetEnvironmentVariable("SOCKET_PATH") ?? "/tmp/backend.sock";
 
-                _ = db.ListLeftPushAsync("payments-queue", json);
+                File.SetUnixFileMode(socketPath, UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                                                   UnixFileMode.GroupRead | UnixFileMode.GroupWrite |
+                                                   UnixFileMode.OtherRead | UnixFileMode.OtherWrite);
+            });
+
+            app.MapPost("/payments", async ([FromBody] PaymentsRequest payment, [FromServices] ChannelWriter<PaymentsRequest> writer, CancellationToken token/*[FromServices] ILogger<Program> logger*/) =>
+            {
+                await writer.WriteAsync(payment, token);
                 return Results.Ok();
             });
 

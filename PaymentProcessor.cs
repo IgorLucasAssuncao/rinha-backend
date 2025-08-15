@@ -1,8 +1,7 @@
 ﻿using Dapper;
-using Org.BouncyCastle.Asn1;
+using Npgsql;
 using System.Text;
 using System.Text.Json;
-using static Org.BouncyCastle.Math.EC.ECCurve;
 using static rinha_backend.Models;
 using static rinha_backend.Requests;
 
@@ -12,72 +11,68 @@ namespace rinha_backend
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly PaymentDecider _paymentDecider;
+        private readonly NpgsqlDataSource _dataSource;
+        private readonly ILogger<PaymentProcessor> _logger;
+
         const string insertSql = @"
-                        INSERT INTO payments (CorrelationId, Amount, IsDefault, RequestedAt) 
-                        VALUES (@CorrelationId, @Amount, @IsDefault, @RequestedAt)
-                        ON CONFLICT (CorrelationId) DO NOTHING";
+        INSERT INTO payments (CorrelationId, Amount, IsDefault, RequestedAt) 
+        VALUES (@CorrelationId, @Amount, @IsDefault, @RequestedAt)
+        ON CONFLICT (CorrelationId) DO NOTHING";
 
-
-        public PaymentProcessor(IHttpClientFactory factory, PaymentDecider paymentDecider)
+        public PaymentProcessor(IHttpClientFactory factory, PaymentDecider paymentDecider, NpgsqlDataSource dataSource, ILogger<PaymentProcessor> logger)
         {
             _httpClientFactory = factory;
             _paymentDecider = paymentDecider;
+            _dataSource = dataSource;
+            _logger = logger;
         }
 
-        public async Task<bool> SendPayment(PaymentsRequest payment, string connectionPgSql)
+        public async Task<bool> SendPayment(PaymentsRequest payment)  
         {
             var bestService = _paymentDecider.GetBestClient();
-            var json = JsonSerializer.Serialize(payment);
 
             if (string.IsNullOrEmpty(bestService))
-            {
                 return false;
-            }
+
+            var json = JsonSerializer.Serialize(payment);
 
             if (await TrySendPayment(bestService, json))
             {
-                await using var conn = new Npgsql.NpgsqlConnection(connectionPgSql!);
+                using var conn = _dataSource.CreateConnection();
                 await conn.OpenAsync();
 
                 var paymentDb = new Payments
                 {
                     CorrelationId = payment.CorrelationId,
                     Amount = payment.Amount,
-                    IsDefault = bestService == "default" ? true : false,
-                    RequestedAt = DateTimeOffset.Parse(payment.RequestedAt)
+                    IsDefault = bestService == "default",  
+                    RequestedAt = payment.RequestedAt
                 };
 
                 await conn.ExecuteAsync(insertSql, paymentDb);
                 return true;
             }
 
-            return false; 
+            return false;
         }
 
-        private async Task<bool> TrySendPayment(string serviceName, string payment)
+        private async Task<bool> TrySendPayment(string serviceName, string jsonPayload)
         {
             try
             {
                 var client = _httpClientFactory.CreateClient(serviceName);
                 var timeout = _paymentDecider.GetRecommendedTimeout(serviceName);
 
-                var content = new StringContent(payment, Encoding.UTF8, "application/json");
+                _logger.LogInformation($"TIMEOUT: {timeout}");
 
+                using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                 using var cts = new CancellationTokenSource(timeout);
-                var response = await client.PostAsync("/payments", content, cts.Token);
 
+                var response = await client.PostAsync("/payments", content, cts.Token);
                 return response.IsSuccessStatusCode;
             }
-            catch (TaskCanceledException)
-            {
-                return false;
-            }
-            catch (HttpRequestException)
-            {
-                return false;
-            }
             catch
-            { 
+            {
                 return false;
             }
         }

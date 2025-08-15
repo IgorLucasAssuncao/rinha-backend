@@ -18,20 +18,6 @@ namespace rinha_backend
             public bool IsDefault { get; set; } = true;
             public DateTimeOffset RequestedAt { get; set; }
         }
-
-        internal record struct PaymentsRequestDTO
-        {
-            public Guid correlationId { get; set; }
-            public decimal amount { get; set; }
-            public string requestedAt { get; set; }
-
-            public PaymentsRequestDTO(Guid correlationId, decimal amount, string requestedAt)
-            {
-                this.correlationId = correlationId;
-                this.amount = amount;
-                this.requestedAt = requestedAt;
-            }
-        }
     }
 
     internal class Requests
@@ -45,9 +31,9 @@ namespace rinha_backend
             public decimal Amount { get; set; }
 
             [JsonPropertyName("requestedAt")]
-            public string RequestedAt { get; set; }
+            public DateTimeOffset RequestedAt { get; set; }
 
-            public PaymentsRequest(Guid correlationId, decimal amount, string requestedAt)
+            public PaymentsRequest(Guid correlationId, decimal amount, DateTimeOffset requestedAt)
             {
                 CorrelationId = correlationId;
                 Amount = amount;
@@ -59,7 +45,7 @@ namespace rinha_backend
             {
                 CorrelationId = correlationId;
                 Amount = amount;
-                RequestedAt = DateTimeOffset.UtcNow.ToString("O");
+                RequestedAt = DateTimeOffset.UtcNow;
             }
         }
     }
