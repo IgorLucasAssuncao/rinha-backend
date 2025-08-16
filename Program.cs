@@ -4,10 +4,12 @@ using Microsoft.Extensions.Options;
 using MySql.Data.MySqlClient;
 using Npgsql;
 using Npgsql.Internal;
+using Org.BouncyCastle.Asn1.Ocsp;
 using Polly;
 using Polly.Extensions.Http;
 using StackExchange.Redis;
 using System.Diagnostics;
+using System.Reflection.Metadata;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -36,11 +38,26 @@ namespace rinha_backend
                 }
             });
 
+            builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+            {
+                var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "redis:6379";
+
+                var options = ConfigurationOptions.Parse(redisConnection);
+
+                options.AbortOnConnectFail = false;
+                options.ConnectRetry = 3;
+                options.SyncTimeout = 5000;
+                options.ConnectTimeout = 5000;
+                options.KeepAlive = 60;
+
+                options.SocketManager = new SocketManager(workerCount: Environment.ProcessorCount);
+
+                return ConnectionMultiplexer.Connect(options);
+            });
+
             #region Redis
 
-            builder.Services.AddOptions<IOptions<RedisConsumerOptions>>();
-
-            builder.Services.AddHostedService<HighThroughputRedisConsumer>();
+            builder.Services.AddHostedService<RedisConsumer>();
 
             builder.Services.AddHostedService<PaymentVerifier>();
 
@@ -64,23 +81,6 @@ namespace rinha_backend
             builder.Services.AddHttpClient("fallback", o =>
                 o.BaseAddress = new Uri(builder.Configuration.GetConnectionString("fallback")!));
 
-            builder.Services.AddSingleton(provider =>
-            {
-                var options = new UnboundedChannelOptions()
-                {
-                    SingleReader = false,
-                    SingleWriter = false,
-                    AllowSynchronousContinuations = true
-                };
-                return Channel.CreateUnbounded<PaymentsRequest>(options);
-            });
-
-            builder.Services.AddSingleton(provider =>
-            provider.GetRequiredService<Channel<PaymentsRequest>>().Writer);
-
-            builder.Services.AddSingleton(provider =>
-                provider.GetRequiredService<Channel<PaymentsRequest>>().Reader);
-
             var app = builder.Build();
 
             app.Lifetime.ApplicationStarted.Register(() =>
@@ -92,10 +92,20 @@ namespace rinha_backend
                                                    UnixFileMode.OtherRead | UnixFileMode.OtherWrite);
             });
 
-            app.MapPost("/payments", async ([FromBody] PaymentsRequest payment, [FromServices] ChannelWriter<PaymentsRequest> writer, CancellationToken token/*[FromServices] ILogger<Program> logger*/) =>
+            app.MapPost("/payments", async (HttpContext context, [FromServices] IConnectionMultiplexer _redis) =>
             {
-                await writer.WriteAsync(payment, token);
-                return Results.Ok();
+                using var ms = new MemoryStream();
+                await context.Request.Body.CopyToAsync(ms);
+                var rawBody = ms.ToArray();
+
+                _ = Task.Run(async () =>
+                {
+                    var db = _redis.GetDatabase();
+                    await db.ListRightPushAsync("payments-queue", rawBody, flags: StackExchange.Redis.CommandFlags.FireAndForget).ConfigureAwait(false);
+                });
+
+
+                return Results.Accepted();
             });
 
             app.MapGet("/payments-summary", async (DateTimeOffset? from, DateTimeOffset? to) =>

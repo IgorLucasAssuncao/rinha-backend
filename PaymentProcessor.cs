@@ -63,8 +63,6 @@ namespace rinha_backend
                 var client = _httpClientFactory.CreateClient(serviceName);
                 var timeout = _paymentDecider.GetRecommendedTimeout(serviceName);
 
-                _logger.LogInformation($"TIMEOUT: {timeout}");
-
                 using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                 using var cts = new CancellationTokenSource(timeout);
 
