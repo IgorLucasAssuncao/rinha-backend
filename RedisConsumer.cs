@@ -32,7 +32,7 @@ namespace rinha_backend
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var consumerTasks = new Task[10];
+            var consumerTasks = new Task[15];
             for (int i = 0; i < consumerTasks.Length; i++)
                 consumerTasks[i] = ConsumeAsync(i, stoppingToken);
 
@@ -49,7 +49,7 @@ namespace rinha_backend
 
                     while ((msg = await _redisConn.ListLeftPopAsync("payments-queue").ConfigureAwait(false)).HasValue)
                     {
-                        var paymentResult = await _processor.SendPayment(JsonSerializer.Deserialize<PaymentsRequest>(msg!));
+                        var paymentResult = await _processor.SendPayment(JsonSerializer.Deserialize<PaymentsRequest>(msg!, JsonContext.Default.PaymentsRequest));
 
                         if (!paymentResult)
                         {

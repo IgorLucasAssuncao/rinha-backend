@@ -16,6 +16,7 @@ using System.Threading.Channels;
 using static rinha_backend.Models;
 using static rinha_backend.Requests;
 using static rinha_backend.Responses;
+[module:DapperAot]
 
 namespace rinha_backend
 {
@@ -53,6 +54,12 @@ namespace rinha_backend
                 options.SocketManager = new SocketManager(workerCount: Environment.ProcessorCount);
 
                 return ConnectionMultiplexer.Connect(options);
+            });
+
+            builder.Services.ConfigureHttpJsonOptions(options =>
+            {
+                options.SerializerOptions.TypeInfoResolverChain.Insert(0, JsonContext.Default);
+                options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
             });
 
             #region Redis
@@ -104,7 +111,6 @@ namespace rinha_backend
                     await db.ListRightPushAsync("payments-queue", rawBody, flags: StackExchange.Redis.CommandFlags.FireAndForget).ConfigureAwait(false);
                 });
 
-
                 return Results.Accepted();
             });
 
@@ -149,5 +155,16 @@ namespace rinha_backend
 
             app.Run();
         }
+    }
+    [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+    [JsonSerializable(typeof(PaymentSummary))]
+    [JsonSerializable(typeof(PaymentItem))]
+    [JsonSerializable(typeof(PaymentsRequest))]
+    [JsonSerializable(typeof(PaymentServiceHealth))]
+    [JsonSerializable(typeof(PaymentsSummaryResponse))]
+    [JsonSerializable(typeof(string))]
+    internal partial class JsonContext : JsonSerializerContext
+    {
+
     }
 }

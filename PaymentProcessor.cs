@@ -34,7 +34,7 @@ namespace rinha_backend
             if (string.IsNullOrEmpty(bestService))
                 return false;
 
-            var json = JsonSerializer.Serialize(payment);
+            var json = JsonSerializer.Serialize(payment, JsonContext.Default.PaymentsRequest);
 
             if (await TrySendPayment(bestService, json))
             {

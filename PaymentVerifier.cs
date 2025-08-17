@@ -1,6 +1,4 @@
-﻿
-using Org.BouncyCastle.Asn1.Ocsp;
-using System.Text.Json;
+﻿using System.Text.Json;
 using static rinha_backend.Responses;
 
 namespace rinha_backend
@@ -45,7 +43,7 @@ namespace rinha_backend
 
                 var content = await response.Content.ReadAsStringAsync();
 
-                return JsonSerializer.Deserialize<PaymentServiceHealth>(content)!;
+                return JsonSerializer.Deserialize(content, JsonContext.Default.PaymentServiceHealth)!;
             }
             catch
             {
